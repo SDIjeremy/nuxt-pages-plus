@@ -36,6 +36,13 @@ export interface ModalRouter {
   stacks: ComputedRef<number[] | undefined>
 
   /**
+   * the full paths of the opened modal view, one per stack group (top last),
+   * for the active history entry — parallel to `stacks`. `undefined` when no
+   * modal is open.
+   */
+  stackPaths: ComputedRef<string[] | undefined>
+
+  /**
    * Close the modal
    * @param allOpened whether to close all opened modals
    */
@@ -59,10 +66,17 @@ export interface ModalRouter {
 
 const DEBUG = false
 
+// Keep the top entry of a stack-path list in sync when navigating within the
+// current stack group (`push` / `replace`); seed the list when it is empty.
+function replaceStackTop(paths: string[] | undefined, path: string): string[] {
+  return paths?.length ? [...paths.slice(0, -1), path] : [path]
+}
+
 export default defineNuxtPlugin(async (nuxt) => {
   const router = useRouter()
 
   let routesStackSizeMap: Record<ModalPushRecord['id'], number[]> = {}
+  let routesStackPathMap: Record<ModalPushRecord['id'], string[]> = {}
   const historyState = shallowRef<ModalPushRecord>()
 
   const stacks = computed(() => {
@@ -70,6 +84,13 @@ export default defineNuxtPlugin(async (nuxt) => {
     if (!currentStatueId)
       return
     return routesStackSizeMap[currentStatueId]
+  })
+
+  const stackPaths = computed(() => {
+    const currentStatueId = historyState.value?.id
+    if (!currentStatueId)
+      return
+    return routesStackPathMap[currentStatueId]
   })
 
   // history is client side only, only hook after app mounted to prevent SSR hydration mismatch
@@ -138,17 +159,21 @@ export default defineNuxtPlugin(async (nuxt) => {
       ...(typeof to === 'string' ? router.resolve(to) : to),
       state,
     }
+    const toPath = router.resolve(to).fullPath
 
     if (action === 'replace') {
       routesStackSizeMap[state.id] = stacks.value ?? [0]
+      routesStackPathMap[state.id] = replaceStackTop(stackPaths.value, toPath)
       return router.replace(_to)
     } else if (action === 'push') {
       const newStack = [...(stacks.value ?? [0])]
       newStack.push((newStack.pop() ?? 0) + 1)
       routesStackSizeMap[state.id] = newStack
+      routesStackPathMap[state.id] = replaceStackTop(stackPaths.value, toPath)
       return router.push(_to)
     } else if (action === 'push_open') {
       routesStackSizeMap[state.id] = [...(stacks.value ?? []), 1]
+      routesStackPathMap[state.id] = [...(stackPaths.value ?? []), toPath]
       return router.push(_to)
     }
   }
@@ -156,6 +181,7 @@ export default defineNuxtPlugin(async (nuxt) => {
   const push: ModalRouter['push'] = function (to, open = false) {
     if (!historyState.value?.backgroundView) {
       routesStackSizeMap = {}
+      routesStackPathMap = {}
       return backgroundNavigate(open ? 'push_open' : 'push', to, router.currentRoute.value.fullPath)
     }
     return backgroundNavigate(open ? 'push_open' : 'push', to, historyState.value.backgroundView)
@@ -196,6 +222,7 @@ export default defineNuxtPlugin(async (nuxt) => {
         layout,
         backgroundRoute: route,
         stacks,
+        stackPaths,
         close,
         push,
         replace,
