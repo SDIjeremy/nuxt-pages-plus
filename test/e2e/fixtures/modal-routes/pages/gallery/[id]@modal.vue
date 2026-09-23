@@ -15,12 +15,24 @@ function pushNext() {
       Push next
     </button>
 
+    <PlusModalLink open :to="`/gallery/${id + 1}`">
+      Open next stack
+    </PlusModalLink>
+
     <PlusModalLink replace to="/gallery/9">
       Replace with last
     </PlusModalLink>
 
+    <NuxtLink to="/">
+      Go to index page
+    </NuxtLink>
+
     <button @click="$modalRouter.close()">
       Close
+    </button>
+
+    <button @click="$modalRouter.close(true)">
+      Close all
     </button>
   </div>
 </template>

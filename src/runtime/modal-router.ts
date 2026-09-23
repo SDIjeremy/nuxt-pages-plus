@@ -10,6 +10,7 @@ import { createModalScrollBehavior } from './modal-scroll'
 interface ModalPushRecord {
   id: string
   backgroundView: string
+  modalStacks?: number[]
 }
 
 export interface ModalRouter {
@@ -62,14 +63,12 @@ const DEBUG = false
 export default defineNuxtPlugin(async (nuxt) => {
   const router = useRouter()
 
-  let routesStackSizeMap: Record<ModalPushRecord['id'], number[]> = {}
   const historyState = shallowRef<ModalPushRecord>()
 
   const stacks = computed(() => {
-    const currentStatueId = historyState.value?.id
-    if (!currentStatueId)
+    if (!historyState.value?.backgroundView)
       return
-    return routesStackSizeMap[currentStatueId]
+    return historyState.value.modalStacks
   })
 
   // history is client side only, only hook after app mounted to prevent SSR hydration mismatch
@@ -81,7 +80,7 @@ export default defineNuxtPlugin(async (nuxt) => {
     // (stale) cached state with history.state on the next push, and only keys
     // present in history.state override the cached values
     if (history.state?.backgroundView) {
-      history.replaceState({ ...history.state, id: undefined, backgroundView: undefined }, '')
+      history.replaceState({ ...history.state, id: undefined, backgroundView: undefined, modalStacks: undefined }, '')
     }
 
     // Nuxt installs its final scroll behavior during app:created. Wrap it after
@@ -132,32 +131,30 @@ export default defineNuxtPlugin(async (nuxt) => {
     to: Parameters<Router['push']>[0] | Parameters<Router['replace']>[0],
     backgroundView: string,
   ) {
-    const state = { id: `plus-${Date.now()}`, backgroundView } satisfies ModalPushRecord
+    const modalStacks = [...(stacks.value ?? [])]
+    if (action === 'push_open') {
+      modalStacks.push(1)
+    } else if (action === 'push') {
+      modalStacks.push((modalStacks.pop() ?? 0) + 1)
+    } else if (!modalStacks.length) {
+      modalStacks.push(0)
+    }
+
+    // Keep sizes on each history entry so older modal groups survive opening
+    // a new stack or reloading a later entry.
+    const state = { id: `plus-${Date.now()}`, backgroundView, modalStacks } satisfies ModalPushRecord
 
     const _to = {
       ...(typeof to === 'string' ? router.resolve(to) : to),
       state,
     }
 
-    if (action === 'replace') {
-      routesStackSizeMap[state.id] = stacks.value ?? [0]
-      return router.replace(_to)
-    } else if (action === 'push') {
-      const newStack = [...(stacks.value ?? [0])]
-      newStack.push((newStack.pop() ?? 0) + 1)
-      routesStackSizeMap[state.id] = newStack
-      return router.push(_to)
-    } else if (action === 'push_open') {
-      routesStackSizeMap[state.id] = [...(stacks.value ?? []), 1]
-      return router.push(_to)
-    }
+    return action === 'replace' ? router.replace(_to) : router.push(_to)
   }
 
   const push: ModalRouter['push'] = function (to, open = false) {
-    if (!historyState.value?.backgroundView) {
-      routesStackSizeMap = {}
+    if (!historyState.value?.backgroundView)
       return backgroundNavigate(open ? 'push_open' : 'push', to, router.currentRoute.value.fullPath)
-    }
     return backgroundNavigate(open ? 'push_open' : 'push', to, historyState.value.backgroundView)
   }
 

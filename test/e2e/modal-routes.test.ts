@@ -21,6 +21,10 @@ describe('modal-routes fixture', async () => {
     expect(await page.getByRole('heading', { name: 'index page' }).isVisible()).toBe(true)
   }
 
+  async function expectStacks(page: Page, stacks: number[] | null) {
+    await expect.poll(() => page.locator('#modal-stacks').textContent()).toBe(JSON.stringify(stacks))
+  }
+
   async function expectStandaloneGallery(page: Page, id: number) {
     // the full gallery page (pages/gallery/[id].vue) renders directly
     await page.getByRole('heading', { name: `gallery page ${id}` }).waitFor()
@@ -106,10 +110,101 @@ describe('modal-routes fixture', async () => {
     await expectGalleryModal(page, 2)
 
     // close performs router.go(-stackSize) — must skip the /gallery/1 modal entry
-    await modal(page).getByRole('button', { name: 'Close' }).click()
+    await modal(page).getByRole('button', { name: 'Close', exact: true }).click()
     await page.waitForURL(url('/'))
     await page.waitForFunction(() => !document.querySelector('.modal-wrapper'))
     await expectRetainedIndexBackground(page)
+
+    await page.close()
+  }, 120_000)
+
+  it('preserves an earlier modal stack after opening a new stack from a plain page', async () => {
+    const page = await createPage('/')
+    await openGalleryModal(page)
+
+    await modal(page).getByRole('button', { name: 'Push next' }).click()
+    await page.waitForURL(url('/gallery/2'))
+    await expectGalleryModal(page, 2)
+    await expectStacks(page, [2])
+
+    await modal(page).getByRole('link', { name: 'Replace with last' }).click()
+    await page.waitForURL(url('/gallery/9'))
+    await expectGalleryModal(page, 9)
+    await expectStacks(page, [2])
+
+    await modal(page).getByRole('link', { name: 'Go to index page' }).click()
+    await page.waitForURL(url('/'))
+    await page.waitForFunction(() => !document.querySelector('.modal-wrapper'))
+    await expectStacks(page, null)
+
+    await page.getByRole('link', { name: 'Open gallery 7', exact: true }).click()
+    await page.waitForURL(url('/gallery/7'))
+    await expectGalleryModal(page, 7)
+    await expectStacks(page, [1])
+
+    await modal(page).getByRole('button', { name: 'Close', exact: true }).click()
+    await page.waitForURL(url('/'))
+    await page.waitForFunction(() => !document.querySelector('.modal-wrapper'))
+
+    await page.goBack()
+    await page.waitForURL(url('/gallery/9'))
+    await expectGalleryModal(page, 9)
+    await expectStacks(page, [2])
+
+    await modal(page).getByRole('button', { name: 'Close', exact: true }).click()
+    await page.waitForURL(url('/'))
+    await page.waitForFunction(() => !document.querySelector('.modal-wrapper'))
+    await expectStacks(page, null)
+
+    await page.close()
+  }, 120_000)
+
+  it('restores nested stack sizes after a refresh for close and close-all', async () => {
+    const page = await createPage('/')
+    await openGalleryModal(page)
+
+    await modal(page).getByRole('button', { name: 'Push next' }).click()
+    await page.waitForURL(url('/gallery/2'))
+    await expectGalleryModal(page, 2)
+
+    await modal(page).getByRole('link', { name: 'Open next stack' }).click()
+    await page.waitForURL(url('/gallery/3'))
+    await expectGalleryModal(page, 3)
+    await expectStacks(page, [2, 1])
+
+    await modal(page).getByRole('button', { name: 'Push next' }).click()
+    await page.waitForURL(url('/gallery/4'))
+    await expectGalleryModal(page, 4)
+    await expectStacks(page, [2, 2])
+
+    await modal(page).getByRole('button', { name: 'Push next' }).click()
+    await page.waitForURL(url('/gallery/5'))
+    await expectGalleryModal(page, 5)
+
+    await page.reload()
+    await waitForHydration(page, url('/gallery/5'), 'hydration')
+    await expectStandaloneGallery(page, 5)
+    await expectStacks(page, null)
+
+    await page.goBack()
+    await page.waitForURL(url('/gallery/4'))
+    await expectGalleryModal(page, 4)
+    await expectStacks(page, [2, 2])
+
+    await modal(page).getByRole('button', { name: 'Close', exact: true }).click()
+    await page.waitForURL(url('/gallery/2'))
+    await expectGalleryModal(page, 2)
+    await expectStacks(page, [2])
+
+    await page.goForward()
+    await page.waitForURL(url('/gallery/3'))
+    await expectGalleryModal(page, 3)
+    await expectStacks(page, [2, 1])
+
+    await modal(page).getByRole('button', { name: 'Close all', exact: true }).click()
+    await page.waitForURL(url('/'))
+    await page.waitForFunction(() => !document.querySelector('.modal-wrapper'))
+    await expectStacks(page, null)
 
     await page.close()
   }, 120_000)
@@ -156,6 +251,7 @@ describe('modal-routes fixture', async () => {
     const state = await page.evaluate(() => ({ ...window.history.state }))
     expect(state.backgroundView).toBeUndefined()
     expect(state.id).toBeUndefined()
+    expect(state.modalStacks).toBeUndefined()
     expect(state.current).toBe('/gallery/1')
     expect(typeof state.position).toBe('number')
 

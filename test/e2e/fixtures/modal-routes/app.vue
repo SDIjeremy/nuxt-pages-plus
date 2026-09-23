@@ -1,3 +1,10 @@
+<script setup lang="ts">
+const { stacks } = useModalRouter()
+</script>
+
 <template>
-  <PlusModalNuxtPage />
+  <div>
+    <output id="modal-stacks">{{ JSON.stringify(stacks ?? null) }}</output>
+    <PlusModalNuxtPage />
+  </div>
 </template>
