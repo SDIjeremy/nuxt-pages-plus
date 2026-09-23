@@ -3,7 +3,7 @@ import type { Ref } from '#imports'
 import type { ParallelRouter } from '../parallel-router'
 import { useNuxtApp, useRoute, useRouter } from '#app'
 import { inject, reactive, toRef, unref } from '#imports'
-import { ParallelRouteSymbol, ParallelRouterSymbol } from '../symbols'
+import { ParallelRouterSymbol, ParallelRouteSymbol } from '../symbols'
 
 // reactive object that always reflects the ref's current value, so a parallel
 // route can be consumed like `useRoute()` without unwrapping `.value`

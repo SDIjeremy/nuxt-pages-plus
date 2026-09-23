@@ -4,7 +4,7 @@ import type { PagesPlusOptions } from '../types'
 import { viewDepthKey } from 'vue-router'
 import pagesPlusOptions from '#build/nuxt-pages-plus-options.mjs'
 import { computed, inject, provide, unref, useParallelRouter } from '#imports'
-import { ParallelRouteSymbol, ParallelRouterSymbol } from '../symbols'
+import { ParallelRouterSymbol, ParallelRouteSymbol } from '../symbols'
 
 const props = defineProps<{
   // Unique name of the parallel router
