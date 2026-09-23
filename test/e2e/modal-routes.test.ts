@@ -160,6 +160,38 @@ describe('modal-routes fixture', async () => {
     await page.close()
   }, 120_000)
 
+  it('syncs stackPaths to the settled route after a redirect', async () => {
+    const page = await createPage('/')
+    await openGalleryModal(page)
+    await expectStacks(page, [1], ['/gallery/1'])
+
+    // push to /gallery/99, which a global middleware redirects to /gallery/6;
+    // the modal state carries across the redirect, so stackPaths must reflect
+    // the settled /gallery/6 rather than the requested /gallery/99
+    await modal(page).getByRole('button', { name: 'Push redirecting' }).click()
+    await page.waitForURL(url('/gallery/6'))
+    await expectGalleryModal(page, 6)
+    await expectStacks(page, [2], ['/gallery/6'])
+
+    await page.close()
+  }, 120_000)
+
+  it('syncs stackPaths after a bare router.replace() outside the modal router', async () => {
+    const page = await createPage('/')
+    await openGalleryModal(page)
+    await expectStacks(page, [1], ['/gallery/1'])
+
+    // a raw vue-router replace keeps the modal open (its state is merged onto the
+    // new entry) but changes the route without going through backgroundNavigate;
+    // stackPaths must follow the new route while the stack size stays unchanged
+    await modal(page).getByRole('button', { name: 'Bare replace' }).click()
+    await page.waitForURL(url('/gallery/8'))
+    await expectGalleryModal(page, 8)
+    await expectStacks(page, [1], ['/gallery/8'])
+
+    await page.close()
+  }, 120_000)
+
   it('restores nested stack sizes after a refresh for close and close-all', async () => {
     const page = await createPage('/')
     await openGalleryModal(page)

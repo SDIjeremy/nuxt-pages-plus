@@ -127,14 +127,28 @@ export default defineNuxtPlugin(async (nuxt) => {
         await loadRouteLocation(router.resolve(history.state.backgroundView))
     })
 
-    router.afterEach((_to, _from, failure) => {
+    router.afterEach((to, _from, failure) => {
       // an aborted navigation commits nothing, but at this point history.state
       // may still belong to the reverted target entry (a guard-aborted popstate
       // is restored asynchronously with vue-router's listener paused, so no
       // later navigation re-syncs it) — snapshotting it would desync the modal
       // state from the entry the browser actually stays on
-      if (!failure)
-        historyState.value = history.state
+      if (failure)
+        return
+
+      // The top modal path is stamped from the *requested* target in
+      // `backgroundNavigate`, but a navigation can still settle elsewhere: a
+      // redirect rewrites the destination, and a bare `router.replace()` (one
+      // that never went through `backgroundNavigate`) leaves vue-router's merged
+      // state carrying the previous path. Re-sync the top entry to the route we
+      // actually landed on so `stackPaths` stays parallel to the live route.
+      const state = history.state
+      if (state?.backgroundView && state.modalStackPaths?.length
+        && state.modalStackPaths.at(-1) !== to.fullPath) {
+        history.replaceState({ ...state, modalStackPaths: replaceStackTop(state.modalStackPaths, to.fullPath) }, '')
+      }
+
+      historyState.value = history.state
     })
   })
 
